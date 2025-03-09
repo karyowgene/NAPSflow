@@ -1,0 +1,6 @@
+Building DAG of jobs...
+MissingInputException in rule all_all in file /home/wagutu/git_projects/NAPSflow/workflow/Snakefile, line 30:
+Missing input files for rule all_all:
+    affected files:
+        ../results/neoag_out/201/all_epitopes.tsv
+        ../results/neoag_out/203/all_epitopes.tsv

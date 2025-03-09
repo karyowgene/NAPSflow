@@ -1,0 +1,14 @@
+# config.yaml
+input_dir: "../data/exome_data/all"
+trimmed_dir: "../data/exome_data/trimmed"
+mapped_dir: "../data/exome_data/mapped"
+sorted_dir: "../data/exome_data/sortedbams"
+rg_dir: "../data/exome_data/rgbams"
+pon_dir: "../data/exome_data/pon_db"
+variants_dir: "../data/exome_data/variants"
+annotated_dir: "../data/exome_data/annotated"
+gff: "../resources/ref/Homo_sapiens.GRCh38.110.gff3.gz"
+reference: "../resources/ref/hg38.fasta"
+known_sites: "../resources/knownsites/hg38.dbsnp138.vcf"
+vep_plugin_dir: ../resources/software/VEP_plugins"
+threads: 4

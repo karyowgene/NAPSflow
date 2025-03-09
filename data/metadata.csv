@@ -1,0 +1,5 @@
+sample	group	subject
+201_R1.fastq.gz	tumor	
+202_R1.fastq.gz	normal	
+203_R1.fastq.gz	tumor	
+204_R1.fastq.gz	normal	

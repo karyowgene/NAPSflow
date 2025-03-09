@@ -1,0 +1,5 @@
+sample	type	fastq_prefix
+201	tumor	201_tumor
+202	normal	201_normal
+203	tumor	203_tumor
+204	normal	203_normal

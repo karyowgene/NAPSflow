@@ -1,0 +1,14 @@
+# Path configurations
+anno_dir: "../data/exome_data/annotated"
+output_base_dir: "../results/neoag_out"
+vcf_dir: "/pvacseq_mydataall_data"
+
+# Analysis parameters
+hla_types: "HLA-A*02:01,HLA-A*30:01,HLA-B*58:01,HLA-C*06:01"  # Default HLA types
+docker_image: "981a3b8b2bd8"
+threads: 1
+
+# pVacSeq parameters
+other_params: "-e1 9,10,11 --iedb-install-directory /opt/iedb -t {threads}"
+more_params: "--normal-cov 0 --tdna-cov 0 --tdna-vaf 0 --normal-vaf 0.99 --trna-cov 0 --trna-vaf 0"
+prediction_algorithms: "MHCflurry MHCnuggetsI SMM SMMPMBEC"

@@ -1,0 +1,77 @@
+# Paths and directories
+wes_smk: "rules/wes.smk"
+wes_config: "../config/wes_config.yaml"
+
+rna_smk: "rules/rna.smk"
+rna_config: "../config/rna_config.yaml"
+
+add_expr_smk: "rules/add_expr.smk"
+add_expr_config: "../config/add_expr_config.yaml"
+
+neo_smk: "rules/neo.smk"
+neo_config: "../config/neo_config.yaml"
+
+samples: [201, 203]  # Your sample IDs
+
+wes:
+    input_dir: "../data/exome_data/all"
+    trimmed_dir: "../data/exome_data/trimmed"
+    mapped_dir: "../data/exome_data/mapped"
+    sorted_dir: "../data/exome_data/sortedbams"
+    rg_dir: "../data/exome_data/rgbams"
+    pon_dir: "../data/exome_data/pon_db"
+    variants_dir: "../data/exome_data/variants"
+    annotated_dir: "../data/exome_data/annotated"
+    gff: "../resources/ref/Homo_sapiens.GRCh38.110.gff3.gz"
+    reference: "../resources/ref/hg38.fasta"
+    known_sites: "../resources/knownsites/hg38.dbsnp138.vcf"
+    vep_plugin_dir: ../resources/software/VEP_plugins"
+    threads: 4
+
+rna:
+    source_dir: "../data/rna_seq"            # Where the original FASTQ files reside
+    raw_dir: "../data/rna_seq" 
+    report_dir: "../report"              # Where renamed raw FASTQ files will be found
+    trimmed_dir: "../data/rna_seq/trimmed" 
+    trimreport_dir: "../report/trimmedreport"   # Where trimmed reads are stored
+    kallisto_quants: "../data/rna_seq/kallisto_quants"  # Where kallisto quantification results go
+    rnaref_dir: "../resources/rnaref"          # Directory for reference transcriptome files
+
+    # Reference files
+    cdna_fa: "../resources/rnaref/Homo_sapiens.GRCh38.cdna.all.fa.gz"  
+    cdna_idx: "../resources/rnaref/Homo_sapiens.GRCh38.cdna.all.release-110.idx"
+
+    # Trimmomatic parameters
+    trimmomatic_adapters: "../resources/adaptors/TruSeq3-PE-2.fa:2:30:10"
+
+    # Computational resources
+    threads: 4
+
+neo:
+    anno_dir: "../data/exome_data/annotated"
+    output_base_dir: "../results/neoag_out"
+    vcf_dir: "/pvacseq_mydataall_data"
+
+    # Analysis parameters
+    hla_types: "HLA-A*02:01,HLA-A*30:01,HLA-B*58:01,HLA-C*06:01"  # Default HLA types
+    docker_image: "981a3b8b2bd8"
+    threads: 1
+
+    # pVacSeq parameters
+    other_params: "-e1 9,10,11 --iedb-install-directory /opt/iedb -t {threads}"
+    more_params: "--normal-cov 0 --tdna-cov 0 --tdna-vaf 0 --normal-vaf 0.99 --trna-cov 0 --trna-vaf 0"
+    prediction_algorithms: "MHCflurry MHCnuggetsI SMM SMMPMBEC"
+
+add_expr:
+    # Path configurations
+    output_dir: "../data/rna_seq"
+    vcf_folder: "../data/exome_data/annotated"
+    reference_fa: "../resources/rnaref/Homo_sapiens.GRCh38.cdna.all.fa.gz"
+
+    # Expression analysis parameters
+    tx2gene_csv: "../resources/rnaref/tx2gene.Homo_sapiens.GRCh38.cdna.csv"
+    expression_file: "{output_dir}/modified_gene_expression.tsv"
+
+    # VCF processing
+    samples_vcf: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246]  # List your VCF sample IDs here
+

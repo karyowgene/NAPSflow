@@ -1,0 +1,19 @@
+# Directory paths
+source_dir: "../data/rna_seq"            # Where the original FASTQ files reside
+raw_dir: "../data/rna_seq" 
+report_dir: "../report"              # Where renamed raw FASTQ files will be found
+trimmed_dir: "../data/rna_seq/trimmed" 
+trimreport_dir: "../report/trimmedreport"   # Where trimmed reads are stored
+kallisto_quants: "../data/rna_seq/kallisto_quants"  # Where kallisto quantification results go
+rnaref_dir: "../resources/rnaref"          # Directory for reference transcriptome files
+
+# Reference files
+cdna_fa: "../resources/rnaref/Homo_sapiens.GRCh38.cdna.all.fa.gz"  
+cdna_idx: "../resources/rnaref/Homo_sapiens.GRCh38.cdna.all.release-110.idx"
+
+# Trimmomatic parameters
+trimmomatic_adapters: "../resources/adaptors/TruSeq3-PE-2.fa:2:30:10"
+
+# Computational resources
+threads: 4
+

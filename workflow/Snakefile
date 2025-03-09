@@ -1,0 +1,33 @@
+import os
+# from snakemake.utils import update_config
+
+# Load the master configuration file.
+configfile: "../config/config.yaml"
+#config = update_config(config,  config["neo"])
+
+# Define subworkflows for each pipeline.
+subworkflow wes:
+    workdir: "rules"
+    snakefile: "wes.smk"
+    configfile: config["wes_config"]
+
+subworkflow rna:
+    workdir: "rules"
+    snakefile: "rna.smk"
+    configfile: config["rna_config"]
+
+subworkflow add_expr:
+    workdir: "rules"
+    snakefile: "add_expr.smk"
+    configfile: config["add_expr_config"]
+
+subworkflow neo:
+    workdir: "rules"
+    snakefile: "neo.smk"
+    configfile: config["neo_config"]
+
+
+rule all_all:
+  input:
+    # Final outputs from neo workflow
+    expand(os.path.join(config["neo"]["output_base_dir"], "{sample}/all_epitopes.tsv"), sample=config["samples"])
