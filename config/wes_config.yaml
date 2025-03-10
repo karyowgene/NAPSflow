@@ -3,12 +3,18 @@ input_dir: "../data/exome_data/all"
 trimmed_dir: "../data/exome_data/trimmed"
 mapped_dir: "../data/exome_data/mapped"
 sorted_dir: "../data/exome_data/sortedbams"
-rg_dir: "../data/exome_data/rgbams"
+rgbam_dir: "../data/exome_data/rgbams"
 pon_dir: "../data/exome_data/pon_db"
 variants_dir: "../data/exome_data/variants"
 annotated_dir: "../data/exome_data/annotated"
 gff: "../resources/ref/Homo_sapiens.GRCh38.110.gff3.gz"
 reference: "../resources/ref/hg38.fasta"
 known_sites: "../resources/knownsites/hg38.dbsnp138.vcf"
-vep_plugin_dir: ../resources/software/VEP_plugins"
+vep_plugin_dir: "../resources/software/VEP_plugins"
+hla_dir: "../resources/software/hlahd.1.7.0"
+exome_bed: "/user/home/bcancer/exome_new.bed"
 threads: 4
+
+samples:
+  normal: ["202", "204", "206", "208", "210", "212", "214", "216", "218", "220", "222", "224", "226", "228", "230", "232", "234", "236", "238", "240", "242", "244", "246"]
+  tumor: ["201", "203", "205", "207", "209", "211", "213", "215", "217", "219", "221", "223", "225", "227", "229", "231", "233", "235", "237", "239", "241", "243", "245"]

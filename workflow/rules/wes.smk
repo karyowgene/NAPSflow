@@ -1,42 +1,42 @@
 # Snakefile
-configfile: "../config/wes_config.yaml"
-import pandas as pd
+configfile: "config.yaml"
 
-# Load samplesheet and pairs
-samples_df = pd.read_csv("../data/samplesheet.tsv", sep="\t")
-pairs_df = pd.read_csv("../data/pairs.tsv", sep="\t")
-
-# Get sample lists
-ALL_SAMPLES = samples_df["sample"].tolist()
-TUMORS = pairs_df["tumor_sample"].tolist()
-NORMALS = pairs_df["normal_sample"].tolist()
-
-# Validate pairs
-def get_normal(tumor):
-    normal = pairs_df[pairs_df["tumor_sample"] == tumor]["normal_sample"].values
-    if len(normal) == 0:
-        raise ValueError(f"No normal found for tumor {tumor}")
-    return normal[0]
-
-# Final targets
 rule all:
     input:
-        expand(f"{config['annotated_dir']}/{{sample}}_annotated.vcf.gz", sample=TUMORS),
-        f"{config['pon_dir']}/pon.vcf.gz"
+        expand(f"{config['annotated_dir']}/{{sample}}_annotated.vcf.gz", sample=config['samples']['tumor']),
+        expand(f"{config['hla_dir']}/estimation/{{sample}}.result", sample=config['samples']['normal'])
 
-# Core processing rules
-rule trim_reads:
+# --- Step 1/2/3: Quality Control ---
+rule fastqc_raw:
     input:
-        r1 = lambda wildcards: f"{config['input_dir']}/{samples_df.loc[samples_df['sample'] == wildcards.sample, 'fastq_prefix'].values[0]}_R1.fastq.gz",
-        r2 = lambda wildcards: f"{config['input_dir']}/{samples_df.loc[samples_df['sample'] == wildcards.sample, 'fastq_prefix'].values[0]}_R2.fastq.gz"
+        expand(f"{config['input_dir']}/{{sample}}_{read}.fastq.gz", read=["R1", "R2"])
+    output:
+        html = expand(f"{config['input_dir']}/{{sample}}_{read}_fastqc.html", read=["R1", "R2"]),
+        zip = expand(f"{config['input_dir']}/{{sample}}_{read}_fastqc.zip", read=["R1", "R2"])
+    threads: config['threads']
+    shell:
+        "fastqc {input} -t {threads} -o {config['input_dir']}"
+
+rule multiqc_raw:
+    input:
+        expand(f"{config['input_dir']}/{{sample}}_{read}_fastqc.zip", read=["R1", "R2"])
+    output:
+        f"{config['input_dir']}/multiqc_report.html"
+    shell:
+        "multiqc {config['input_dir']} -o {config['input_dir']}"
+
+# --- Step 2: Trimming ---
+rule trimmomatic:
+    input:
+        r1 = f"{config['input_dir']}/{{sample}}_R1.fastq.gz",
+        r2 = f"{config['input_dir']}/{{sample}}_R2.fastq.gz"
     output:
         r1_paired = temp(f"{config['trimmed_dir']}/{{sample}}_R1_paired.fastq.gz"),
         r1_unpaired = temp(f"{config['trimmed_dir']}/{{sample}}_R1_unpaired.fastq.gz"),
         r2_paired = temp(f"{config['trimmed_dir']}/{{sample}}_R2_paired.fastq.gz"),
         r2_unpaired = temp(f"{config['trimmed_dir']}/{{sample}}_R2_unpaired.fastq.gz")
-    log:
-        f"{config['trimmed_dir']}../logs/{{sample}}_trim.log"
-    threads: config["threads"]
+    log: f"{config['trimmed_dir']}/logs/{{sample}}_trim.log"
+    threads: config['threads']
     shell:
         """
         trimmomatic PE -threads {threads} {input.r1} {input.r2} \
@@ -46,108 +46,268 @@ rule trim_reads:
         LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:151 2> {log}
         """
 
-rule align_sort:
+# --- StepTrim Quality Control ---
+
+rule fastqc_trimmed:
     input:
-        r1 = rules.trim_reads.output.r1_paired,
-        r2 = rules.trim_reads.output.r2_paired,
-        ref = config["reference"]
+        expand(f"{config['trimmed_dir']}/{{sample}}_{read}._paired.fastq.gz", read=["R1", "R2"])
     output:
-        temp(f"{config['sorted_dir']}/{{sample}}_sorted.bam")
-    log:
-        f"{config['sorted_dir']}../logs/{{sample}}_align_sort.log"
-    threads: config["threads"]
+        html = expand(f"{config['trimmed_dir']}/{{sample}}_{read}_paired.fastqc.html", read=["R1", "R2"]),
+        zip = expand(f"{config['trimmed_dir']}/{{sample}}_{read}_paired.fastqc.zip", read=["R1", "R2"])
+    threads: config['threads']
+    shell:
+        "fastqc {input} -t {threads} -o {config['trimmed_dir']}"
+
+rule multiqc_trimmed:
+    input:
+        expand(f"{config['trimmed_dir']}/{{sample}}_{read}_paired.fastqc.zip", read=["R1", "R2"])
+    output:
+        f"{config['trimmed_dir']}/multiqc_report.html"
+    shell:
+        "multiqc {config['trimmed_dir']} -o {config['trimmed_dir']}"
+
+# --- Step 4: Alignment ---
+rule bwa_index:
+    input: config['reference']
+    output: touch(f"{config['reference']}.bwt")
+    shell:
+        "bwa index {input}"
+
+rule bwa_mem:
+    input:
+        r1 = rules.trimmomatic.output.r1_paired,
+        r2 = rules.trimmomatic.output.r2_paired,
+        idx = rules.bwa_index.output
+    output:
+        temp(f"{config['mapped_dir']}/{{sample}}.sam")
+    log: f"{config['mapped_dir']}/logs/{{sample}}_align.log"
+    threads: config['threads']
+    shell:
+        "bwa mem -t {threads} {config['reference']} {input.r1} {input.r2} > {output} 2> {log}"
+
+rule sam_to_bam:
+    input: f"{config['mapped_dir']}/{{sample}}.sam"
+    output: temp(f"{config['mapped_dir']}/{{sample}}.bam")
+    threads: config['threads']
+    shell:
+        "samtools view -@ {threads} -b {input} > {output}"
+
+rule sort_bam:
+    input: rules.sam_to_bam.output
+    output: f"{config['sorted_dir']}/{{sample}}_sorted.bam"
+    threads: config['threads']
+    shell:
+        "samtools sort -@ {threads} -o {output} {input}"
+
+rule index_bam:
+    input: rules.sort_bam.output
+    output: f"{config['sorted_dir']}/{{sample}}_sorted.bam.bai"
+    shell:
+        "samtools index {input}"
+
+# --- Step 5: Mark Duplicates ---
+rule mark_duplicates:
+    input: rules.sort_bam.output
+    output:
+        bam = f"{config['sorted_dir']}/{{sample}}_dupmarked.bam",
+        metrics = f"{config['sorted_dir']}/{{sample}}_metrics.txt"
+    log: f"{config['sorted_dir']}/logs/{{sample}}_dups.log"
+    shell:
+        "picard MarkDuplicates I={input} O={output.bam} M={output.metrics} VALIDATION_STRINGENCY=LENIENT 2> {log}"
+
+# --- Step 6: Add Read Groups ---
+rule add_read_groups:
+    input: rules.mark_duplicates.output.bam
+    output: f"{config['rgbam_dir']}/{{sample}}_rg.bam"
+    params:
+        RGID = "HV3HWDSXY.4",
+        RGLB = "library1",
+        RGPL = "illumina",
+        RGPU = "unit1",
+        RGSM = "{sample}"
     shell:
         """
-        bwa mem -t {threads} {input.ref} {input.r1} {input.r2} | \
-        samtools view -@ {threads} -b | \
-        samtools sort -@ {threads} -o {output} - 2> {log}
-        samtools index {output} 2>> {log}
+        picard AddOrReplaceReadGroups \
+        I={input} \
+        O={output} \
+        RGID={params.RGID} \
+        RGLB={params.RGLB} \
+        RGPL={params.RGPL} \
+        RGPU={params.RGPU} \
+        RGSM={params.RGSM}
         """
 
-# Variant calling rules
-rule mutect2_tumor_normal:
+# --- Step 7: Base Quality Recalibration ---
+rule base_recalibrator:
     input:
-        tumor = lambda wildcards: f"{config['sorted_dir']}/{{wildcards.tumor}}_sorted.bam",
-        normal = lambda wildcards: f"{config['sorted_dir']}/{{get_normal(wildcards.tumor)}}_sorted.bam",
-        pon = f"{config['pon_dir']}/pon.vcf.gz"
+        bam = rules.add_read_groups.output,
+        known = config['known_sites']
     output:
-        f"{config['variants_dir']}/{{tumor}}_somatic.vcf.gz"
-    log:
-        f"{config['variants_dir']}../logs/{{tumor}}_mutect2.log"
-    threads: 8
+        table = temp(f"{config['rgbam_dir']}/{{sample}}_recal_data.table")
+    log: f"{config['rgbam_dir']}/logs/{{sample}}_bqsr.log"
     shell:
         """
-        gatk --java-options '-Xmx16G' Mutect2 \
+        gatk BaseRecalibrator \
         -R {config['reference']} \
-        -I {input.tumor} \
-        -I {input.normal} \
-        --panel-of-normals {input.pon} \
-        -O {output} 2> {log}
+        -I {input.bam} \
+        --known-sites {input.known} \
+        -O {output.table} 2> {log}
         """
 
-# PoN creation rules
-rule mutect2_normal:
+rule apply_bqsr:
     input:
-        bam = lambda wildcards: f"{config['sorted_dir']}/{{wildcards.normal}}_sorted.bam"
+        bam = rules.add_read_groups.output,
+        table = rules.base_recalibrator.output.table
     output:
-        f"{config['pon_dir']}/{{normal}}_normal.vcf.gz"
-    log:
-        f"{config['pon_dir']}../logs/{{normal}}_mutect2.log"
-    threads: 8
+        bam = f"{config['rgbam_dir']}/{{sample}}_recal.bam"
     shell:
         """
-        gatk --java-options '-Xmx16G' Mutect2 \
+        gatk ApplyBQSR \
+        -R {config['reference']} \
+        -I {input.bam} \
+        --bqsr-recal-file {input.table} \
+        -O {output.bam}
+        """
+
+# --- Step 8: Metrics Collection ---
+rule collect_metrics:
+    input: rules.apply_bqsr.output.bam
+    output:
+        alignment = f"{config['rgbam_dir']}/{{sample}}_alignmetrics.txt",
+        insert = f"{config['rgbam_dir']}/{{sample}}_insertmetrics.txt"
+    shell:
+        """
+        gatk CollectAlignmentSummaryMetrics -I {input} -R {config['reference']} -O {output.alignment}
+        gatk CollectInsertSizeMetrics -I {input} -O {output.insert}
+        """
+
+# --- Step 9: Variant Calling ---
+rule mutect2_normal:
+    input: 
+        bam = expand(f"{config['rgbam_dir']}/{{normal}}_recal.bam", normal=config['samples']['normal'])
+    output:
+        vcf = f"{config['variants_dir']}/normal/{{normal}}_normal.vcf.gz"
+    shell:
+        """
+        gatk Mutect2 \
         -R {config['reference']} \
         -I {input.bam} \
         -max-mnp-distance 0 \
-        -O {output} 2> {log}
+        -O {output.vcf}
         """
 
-rule genomicsdb_import:
+rule genomics_db_import:
     input:
-        expand(f"{config['pon_dir']}/{{normal}}_normal.vcf.gz", normal=NORMALS)
+        expand(f"{config['variants_dir']}/normal/{{normal}}_normal.vcf.gz", normal=config['samples']['normal'])
     output:
-        directory(f"{config['pon_dir']}/genomicsdb_workspace")
+        directory(f"{config['pon_dir']}")
     shell:
         """
         gatk GenomicsDBImport \
         -R {config['reference']} \
+        -L {config['exome_bed']} \
         --genomicsdb-workspace-path {output} \
-        --merge-input-intervals true \
-        -V {' -V '.join(input)}
+        {input}
         """
 
 rule create_pon:
     input:
-        rules.genomicsdb_import.output
+        db = rules.genomics_db_import.output
     output:
-        f"{config['pon_dir']}/pon.vcf.gz"
+        vcf = f"{config['variants_dir']}/pon/pon.vcf.gz"
     shell:
         """
         gatk CreateSomaticPanelOfNormals \
         -R {config['reference']} \
-        -V gendb://{input} \
-        -O {output}
+        -V gendb://{input.db} \
+        -O {output.vcf}
         """
 
-# Annotation rule
-rule vep_annotation:
+rule mutect2_tumor:
     input:
-        vcf = f"{config['variants_dir']}/{{tumor}}_somatic.vcf.gz",
-        gff = config["gff"]
+        tumor = f"{config['rgbam_dir']}/{{tumor}}_recal.bam",
+        normal = f"{config['rgbam_dir']}/{{normal}}_recal.bam",
+        pon = rules.create_pon.output.vcf
     output:
-        f"{config['annotated_dir']}/{{tumor}}_annotated.vcf.gz"
+        vcf = f"{config['variants_dir']}/tumor/{{tumor}}_somatic.vcf.gz"
     params:
-        plugin_dir = config["vep_plugin_dir"]
-    log:
-        f"{config['annotated_dir']}../logs/{{tumor}}_vep.log"
+        normal_sample = lambda wildcards: str(int(wildcards.tumor) + 1)
     shell:
         """
-        vep --hgvs --fasta {config['reference']} \
-        --gff {input.gff} \
-        --plugin Downstream --plugin Frameshift --plugin Wildtype \
-        -i {input.vcf} \
+        gatk Mutect2 \
+        -R {config['reference']} \
+        -I {input.tumor} \
+        -I {input.normal} \
+        --panel-of-normals {input.pon} \
+        -O {output.vcf}
+        """
+
+# --- Step 10: Variant Normalization ---
+rule normalize_vcf:
+    input: rules.mutect2_tumor.output.vcf
+    output: f"{config['variants_dir']}/normalized/{{tumor}}_normalized.vcf.gz"
+    shell:
+        "vt normalize {input} -r {config['reference']} -n -o {output}"
+
+# --- Step 11: Variant Filtering ---
+rule filter_variants:
+    input: rules.normalize_vcf.output
+    output: 
+        vcf = f"{config['variants_dir']}/filtered/{{tumor}}_filtered.vcf.gz",
+        idx = f"{config['variants_dir']}/filtered/{{tumor}}_filtered.vcf.gz.tbi"
+    shell:
+        """
+        gatk SelectVariants \
+        -R {config['reference']} \
+        -V {input} \
+        -select-type SNP \
+        -select-type INDEL \
+        -O {output.vcf}
+        """
+
+# --- Step 12: Annotation ---
+rule vep_annotation:
+    input: rules.filter_variants.output.vcf
+    output: f"{config['annotated_dir']}/{{tumor}}_annotated.vcf.gz"
+    params:
+        gff = "/user/home/bcancer/ref/Homo_sapiens.GRCh38.110.gff3.gz",
+        plugins = "/user/home/bcancer/software/VEP_plugins"
+    shell:
+        """
+        vep --hgvs --fasta {config['reference']}.gz \
+        --gff {params.gff} \
+        -i {input} \
         -o {output} \
-        --vcf --coding_only --no_intergenic \
-        --dir_plugins {params.plugin_dir} 2> {log}
+        --vcf \
+        --plugin Downstream \
+        --plugin Frameshift \
+        --plugin Wildtype \
+        --coding_only \
+        --no_intergenic \
+        --dir_plugins {params.plugins}
+        """
+
+# --- Step 13: HLA Typing ---
+rule hlahd_typing:
+    input:
+        r1 = f"{config['trimmed_dir']}/{{sample}}_R1_paired.fastq.gz",
+        r2 = f"{config['trimmed_dir']}/{{sample}}_R2_paired.fastq.gz"
+    output:
+        f"{config['hla_dir']}/estimation/{{sample}}.result"
+    params:
+        freq = f"{config['hla_dir']}/freq_data",
+        gene_split = f"{config['hla_dir']}/HLA_gene.split.txt",
+        dict_dir = f"{config['hla_dir']}/dictionary"
+    threads: config['threads']
+    shell:
+        """
+        zcat {input.r1} > {config['hla_dir']}/data/{wildcards.sample}_R1.fastq
+        zcat {input.r2} > {config['hla_dir']}/data/{wildcards.sample}_R2.fastq
+        hlahd.sh -t {threads} \
+        {config['hla_dir']}/data/{wildcards.sample}_R1.fastq \
+        {config['hla_dir']}/data/{wildcards.sample}_R2.fastq \
+        {params.gene_split} \
+        {params.dict_dir} \
+        {wildcards.sample} \
+        {config['hla_dir']}/estimation
         """
